@@ -235,23 +235,40 @@ window.onload = function () {
       e.preventDefault();
       e.stopPropagation();
       // console.log(e);
+      
+      // Calculate canvas coordinates once when touch starts
+      var canvasCoordinates = canvas.getBoundingClientRect();
+      var mouseX = e.touches[0].clientX - canvasCoordinates.x;
+      var mouseY = e.touches[0].clientY - canvasCoordinates.y;
+      
+      // Account for any CSS scaling
+      var scaleX = canvas.width / canvasCoordinates.width;
+      var scaleY = canvas.height / canvasCoordinates.height;
+      
+      // Convert to actual canvas coordinates
+      mouseX = mouseX * scaleX;
+      mouseY = mouseY * scaleY;
+      
       function onDrag(e){
           e.preventDefault();
           e.stopPropagation();
           var x = e.touches[0].clientX - canvasCoordinates.x;
           var y = e.touches[0].clientY - canvasCoordinates.y;
+          
+          // Apply the same scaling to current coordinates
+          x = x * scaleX;
+          y = y * scaleY;
+          
           // console.log(x, y);
-          var rectwidth =  x - mouseX;
-          var rectheight = y - mouseY
-        //   console.log(rectwidth, rectheight);
-        if (Math.abs(rectwidth)>=Math.abs(rectheight)){
-            dragbox.width = rectwidth;
-            dragbox.height = 0.8 * Math.abs(dragbox.width) * ((rectheight<0)?-1:1);
-        }
-        else{
-            dragbox.height = rectheight;
-            dragbox.width = 1.25 * Math.abs(dragbox.height) * ((rectwidth<0)?-1:1);
-        }
+          
+          // Calculate the box dimensions from the mouse starting point
+          var rectwidth = x - mouseX;
+          var rectheight = y - mouseY;
+          
+          // Update the dragbox dimensions
+          dragbox.width = rectwidth;
+          dragbox.height = rectheight;
+          
           // console.log(dragbox.height, dragbox.width);
           repaint();
 
@@ -263,9 +280,9 @@ window.onload = function () {
           function calculateNewLimits(){
                 if (!dragbox) return;
                 var up = new BigDecimal("" + math.round(dragbox.y));
-                var left = new BigDecimal("" + math.round(dragbox.x));
-                var down = new BigDecimal("" + math.round(dragbox.y + dragbox.height));
-                var right = new BigDecimal("" + math.round(dragbox.x + dragbox.width));
+                var left = new BigDecimal("" + Math.round(dragbox.x));
+                var down = new BigDecimal("" + Math.round(dragbox.y + dragbox.height));
+                var right = new BigDecimal("" + Math.round(dragbox.x + dragbox.width));
                 
                 
                 up = posy.subtract(posy.subtract(negy).divide(new BigDecimal(""+(canvasHeight)),BigDecimal.ROUND_HALF_EVEN).multiply(up));
@@ -303,13 +320,12 @@ window.onload = function () {
 
       }
       
-      var canvasCoordinates = canvas.getBoundingClientRect();
       // console.log(canvasCoordinates.x, canvasCoordinates.y);
-      var mouseX = e.touches[0].clientX - canvasCoordinates.x;
-      var mouseY = e.touches[0].clientY - canvasCoordinates.y;
       // console.log(mouseX, mouseY);
       canvas.addEventListener("touchmove", onDrag, { passive: false });
       window.addEventListener("touchend", onMouseUp)
+      
+      // Create dragbox at the exact touch position
       dragbox = new DragBox(mouseX, mouseY);
       // console.log(dragbox);
       // dragbox.draw();
@@ -317,22 +333,40 @@ window.onload = function () {
     
     function handleCanvasMouseDown(e){
         // console.log(e);
+        
+        // Calculate canvas coordinates once when mouse is pressed
+        var canvasCoordinates = canvas.getBoundingClientRect();
+        var mouseX = e.clientX - canvasCoordinates.x;
+        var mouseY = e.clientY - canvasCoordinates.y;
+        
+        // Account for any CSS scaling
+        var scaleX = canvas.width / canvasCoordinates.width;
+        var scaleY = canvas.height / canvasCoordinates.height;
+        
+        // Convert to actual canvas coordinates
+        mouseX = mouseX * scaleX;
+        mouseY = mouseY * scaleY;
+        
+        console.log("Mouse down at:", mouseX, mouseY, "scale:", scaleX, scaleY);
 
         function onDrag(e){
             var x = e.clientX - canvasCoordinates.x;
             var y = e.clientY - canvasCoordinates.y;
             
-            var rectwidth =  x - mouseX;
+            // Apply the same scaling to current coordinates
+            x = x * scaleX;
+            y = y * scaleY;
+            
+            // Calculate the box dimensions from the mouse starting point
+            var rectwidth = x - mouseX;
             var rectheight = y - mouseY;
-            // console.log(rectwidth, rectheight);
-            if (Math.abs(rectwidth)>=Math.abs(rectheight)){
-                dragbox.width = rectwidth;
-                dragbox.height = 0.8 * Math.abs(dragbox.width) * ((rectheight<0)?-1:1);
-            }
-            else{
-                dragbox.height = rectheight;
-                dragbox.width = 1.25 * Math.abs(dragbox.height) * ((rectwidth<0)?-1:1);
-            }
+            
+            console.log("Dragging - current:", x, y, "start:", mouseX, mouseY, "dimensions:", rectwidth, rectheight);
+            
+            // Update the dragbox dimensions
+            dragbox.width = rectwidth;
+            dragbox.height = rectheight;
+            
             // console.log(dragbox.height, dragbox.width);
             repaint();
 
@@ -357,7 +391,7 @@ window.onload = function () {
                 left = negx.add(posx.subtract(negx).divide(new BigDecimal(""+(canvasWidth)),BigDecimal.ROUND_HALF_EVEN).multiply(left));
                 right = negx.add(posx.subtract(negx).divide(new BigDecimal(""+(canvasWidth)),BigDecimal.ROUND_HALF_EVEN).multiply(right));
                 setLimits(right,up,left,down);
-                // var rectX = new BigDecimal("" + Math.round(dragbox.x));  // (Firefox can have fractional parts)
+                // var rectX = new BigDecimal("" + Math.round(dragbox.y));  // (Firefox can have fractional parts)
                 // var rectY = new BigDecimal("" + Math.round(dragbox.y));
                 // var rectW = new BigDecimal("" + Math.round(dragbox.width));
                 // var rectH = new BigDecimal("" + Math.round(dragbox.height));
@@ -365,7 +399,7 @@ window.onload = function () {
                 // var ImageHeight = new BigDecimal("" + canvas.height);
                 // var pixelWidth = posx.subtract(negx).divide(ImageWidth,BigDecimal.ROUND_HALF_EVEN);
                 // var pixelHeight = posy.subtract(negy).divide(ImageHeight,BigDecimal.ROUND_HALF_EVEN);
-                // var newXmin,newXmax,newYmin,newYmax;
+                // var newXmin,newYmax,newYmin,newYmax;
                 // newXmin = negx.add(pixelWidth.multiply(rectX));
                 // newYmax = posy.subtract(pixelHeight.multiply(rectY));
                 // var newWidth = pixelWidth.multiply(rectW);
@@ -403,15 +437,14 @@ window.onload = function () {
 
         }
         
-        var canvasCoordinates = canvas.getBoundingClientRect();
         // console.log(canvasCoordinates.x, canvasCoordinates.y);
-        var mouseX = e.clientX - canvasCoordinates.x;
-        var mouseY = e.clientY - canvasCoordinates.y;
         // console.log(mouseX, mouseY);
         canvas.addEventListener("mousemove", onDrag);
         window.addEventListener("mouseup",onMouseUp);
 
+        // Create dragbox at the exact mouse position
         dragbox = new DragBox(mouseX, mouseY);
+        console.log("Created dragbox at:", dragbox.x, dragbox.y);
         // console.log(dragbox);
         // dragbox.draw();
     }
@@ -531,19 +564,22 @@ window.onload = function () {
             // Clear any previous drawing artifacts
             ctx.save();
             
-            // Draw a semi-transparent fill
-            ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
-            ctx.fillRect(this.x, this.y, this.width, this.height);
-            
-            // Draw the border with better visibility
-            ctx.strokeStyle = "#FFFFFF";
-            ctx.lineWidth = 3;
-            ctx.strokeRect(this.x, this.y, this.width, this.height);
-            
-            // Draw inner border for better contrast
-            ctx.strokeStyle = "#000000";
-            ctx.lineWidth = 1;
-            ctx.strokeRect(this.x + 1, this.y + 1, this.width - 2, this.height - 2);
+            // Draw the box even when dimensions are small (for immediate feedback)
+            if (this.width !== 0 || this.height !== 0) {
+                // Draw a semi-transparent fill
+                ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw the border with better visibility
+                ctx.strokeStyle = "#FFFFFF";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+                
+                // Draw inner border for better contrast
+                ctx.strokeStyle = "#000000";
+                ctx.lineWidth = 1;
+                ctx.strokeRect(this.x + 1, this.y + 1, this.width - 2, this.height - 2);
+            }
             
             ctx.restore();
         }

@@ -10,13 +10,13 @@ body{
 }
 
 canvas:hover{
-    cursor: crosshair;
+    cursor: default;
 }
 
 /* Mobile-specific styles */
 @media (max-width: 768px) {
     canvas {
-        cursor: crosshair;
+        cursor: default;
         max-width: 100%;
         height: auto;
         touch-action: none; /* Prevent default touch behaviors */
