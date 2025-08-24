@@ -117,8 +117,19 @@ window.onload = function () {
     // canvasComputedStyle = getComputedStyle(canvas);
     // canvasWidth = parseInt(canvasComputedStyle.width);
     // canvasHeight = parseInt(canvasComputedStyle.height);
-    canvas.height = Math.floor(document.documentElement.clientHeight/applicationZoom);
-    canvas.width = Math.ceil(canvas.height * 1.25);
+    
+    // Improved canvas sizing for mobile and desktop
+    var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+        // Mobile: use viewport dimensions with better aspect ratio
+        canvas.height = Math.min(window.innerHeight * 0.8, 600);
+        canvas.width = Math.min(canvas.height * 1.25, window.innerWidth * 0.9);
+    } else {
+        // Desktop: use document dimensions
+        canvas.height = Math.floor(document.documentElement.clientHeight/applicationZoom);
+        canvas.width = Math.ceil(canvas.height * 1.25);
+    }
+    
     canvasHeight = canvas.height;
     canvasWidth = canvas.width;
     // console.log(canvasWidth);
@@ -142,6 +153,13 @@ window.onload = function () {
     var workers;
     var workerCount = 16;
     var running = false;
+    
+    // Performance optimization variables
+    var isZooming = false;
+    var zoomQuality = 1; // 1 = full quality, 2 = half quality, 4 = quarter quality
+    var progressiveRendering = true;
+    var lastRenderTime = 0;
+    var renderInterval = 50; // ms between progressive renders
 
 // ------------ dragbox variables -----------
 
@@ -183,16 +201,45 @@ window.onload = function () {
       posx = posx.setScale(precision+5,BigDecimal.ROUND_HALF_EVEN);
       negy = negy.setScale(precision+5,BigDecimal.ROUND_HALF_EVEN);
       posy = posy.setScale(precision+5,BigDecimal.ROUND_HALF_EVEN);
+      
+      // Calculate zoom level and adjust quality accordingly
+      calculateOptimalQuality();
+  }
+  
+  function calculateOptimalQuality() {
+      // Calculate the zoom factor based on the current view area
+      var currentArea = posx.subtract(negx).multiply(posy.subtract(negy));
+      var initialArea = new BigDecimal("0.8").subtract(new BigDecimal("-2.2")).multiply(
+          new BigDecimal("1.2").subtract(new BigDecimal("-1.2"))
+      );
+      var zoomFactor = initialArea.divide(currentArea, BigDecimal.ROUND_HALF_EVEN);
+      
+      // Adjust quality based on zoom level for better performance
+      if (zoomFactor.compareTo(new BigDecimal("100")) > 0) {
+          zoomQuality = 4; // Very zoomed in - use quarter quality for speed
+      } else if (zoomFactor.compareTo(new BigDecimal("10")) > 0) {
+          zoomQuality = 2; // Moderately zoomed in - use half quality
+      } else {
+          zoomQuality = 1; // Normal zoom - use full quality
+      }
+      
+      // Adjust worker count based on zoom level
+      if (zoomQuality > 1) {
+          workerCount = Math.min(32, navigator.hardwareConcurrency || 8); // Use more workers for faster rendering
+      } else {
+          workerCount = Math.min(16, navigator.hardwareConcurrency || 8);
+      }
   }
 
     function handleCanvasTouchDown(e){
       e.preventDefault();
+      e.stopPropagation();
       // console.log(e);
       function onDrag(e){
           e.preventDefault();
-        //   e.stopPropagation();
-          var x = e.touches[0].clientX/applicationZoom - canvasCoordinates.x;
-          var y = e.touches[0].clientY/applicationZoom - canvasCoordinates.y;
+          e.stopPropagation();
+          var x = e.touches[0].clientX - canvasCoordinates.x;
+          var y = e.touches[0].clientY - canvasCoordinates.y;
           // console.log(x, y);
           var rectwidth =  x - mouseX;
           var rectheight = y - mouseY
@@ -233,7 +280,7 @@ window.onload = function () {
             canvas.removeEventListener("mousemove",onDrag);
             canvas.removeEventListener("touchmove", onDrag)
             window.removeEventListener("mouseup",onMouseUp);
-            window.removeEventListener("touchup", onMouseUp)
+            window.removeEventListener("touchend", onMouseUp)
             // console.log(dragbox.height, dragbox.width);
             if (dragbox.height<0){
                 dragbox.y+=dragbox.height;
@@ -258,13 +305,10 @@ window.onload = function () {
       
       var canvasCoordinates = canvas.getBoundingClientRect();
       // console.log(canvasCoordinates.x, canvasCoordinates.y);
-      var mouseX = e.touches[0].clientX/applicationZoom - canvasCoordinates.x;
-      var mouseY = e.touches[0].clientY/applicationZoom - canvasCoordinates.y;
+      var mouseX = e.touches[0].clientX - canvasCoordinates.x;
+      var mouseY = e.touches[0].clientY - canvasCoordinates.y;
       // console.log(mouseX, mouseY);
-      e.target.addEventListener("mousemove", onDrag);
-      e.target.addEventListener("touchmove", onDrag)
-      // e.target.addEventListener("mouseup", onMouseUp);
-      window.addEventListener("mouseup",onMouseUp);
+      canvas.addEventListener("touchmove", onDrag, { passive: false });
       window.addEventListener("touchend", onMouseUp)
       dragbox = new DragBox(mouseX, mouseY);
       // console.log(dragbox);
@@ -275,8 +319,8 @@ window.onload = function () {
         // console.log(e);
 
         function onDrag(e){
-            var x = e.clientX/applicationZoom - canvasCoordinates.x;
-            var y = e.clientY/applicationZoom - canvasCoordinates.y;
+            var x = e.clientX - canvasCoordinates.x;
+            var y = e.clientY - canvasCoordinates.y;
             
             var rectwidth =  x - mouseX;
             var rectheight = y - mouseY;
@@ -336,9 +380,7 @@ window.onload = function () {
             }
             
             canvas.removeEventListener("mousemove",onDrag);
-            canvas.removeEventListener("touchmove", onDrag)
             window.removeEventListener("mouseup",onMouseUp);
-            window.removeEventListener("touchup", onMouseUp)
             // console.log(dragbox.height, dragbox.width);
             if (dragbox.height<0){
                 dragbox.y+=dragbox.height;
@@ -363,14 +405,11 @@ window.onload = function () {
         
         var canvasCoordinates = canvas.getBoundingClientRect();
         // console.log(canvasCoordinates.x, canvasCoordinates.y);
-        var mouseX = e.clientX/applicationZoom - canvasCoordinates.x;
-        var mouseY = e.clientY/applicationZoom - canvasCoordinates.y;
+        var mouseX = e.clientX - canvasCoordinates.x;
+        var mouseY = e.clientY - canvasCoordinates.y;
         // console.log(mouseX, mouseY);
-        e.target.addEventListener("mousemove", onDrag);
-        e.target.addEventListener("touchmove", onDrag)
-        // e.target.addEventListener("mouseup", onMouseUp);
+        canvas.addEventListener("mousemove", onDrag);
         window.addEventListener("mouseup",onMouseUp);
-        window.addEventListener("touchend", onMouseUp)
 
         dragbox = new DragBox(mouseX, mouseY);
         // console.log(dragbox);
@@ -385,9 +424,20 @@ window.onload = function () {
             }           
 
         }
+        
+        // Throttle repaints during zooming for better performance
+        if (isZooming && progressiveRendering) {
+            var now = Date.now();
+            if (now - lastRenderTime < renderInterval) {
+                return; // Skip this repaint to improve performance
+            }
+            lastRenderTime = now;
+        }
+        
         dodraw();
         if (running){
-            calculatedRowsIndicator.innerHTML = "Calculated Row "+jobsFinished+"/"+canvas.height;
+            var progress = Math.round((jobsFinished / canvasHeight) * 100);
+            calculatedRowsIndicator.innerHTML = "Calculated Row "+jobsFinished+"/"+canvas.height + " (" + progress + "%)";
             calculatedRowsIndicator.style.color = "blue";
             calculatedRowsIndicator.style.display = "block";
           } 
@@ -411,6 +461,7 @@ window.onload = function () {
         }
         else{
             running = false;
+            isZooming = false;
             statusIndicator.innerHTML = "Idle";
             statusIndicator.style.color = "green";
             calculatedRowsIndicator.style.display = "none"
@@ -418,6 +469,13 @@ window.onload = function () {
         var iterationCounts = job[2];
         // console.log(iterationCounts);
         putrow(job[1], iterationCounts);
+        
+        // Update status more frequently for better user feedback
+        if (running && jobsFinished % Math.max(1, Math.floor(canvasHeight / 20)) === 0) {
+            var progress = Math.round((jobsFinished / canvasHeight) * 100);
+            statusIndicator.innerHTML = "Processing (" + progress + "%)";
+            calculatedRowsIndicator.innerHTML = "Calculated Row "+jobsFinished+"/"+canvas.height;
+        }
     }
 
     function putrow(row, iterationCounts) {
@@ -470,12 +528,24 @@ window.onload = function () {
         this.width = 0
 
         this.draw = () => {
+            // Clear any previous drawing artifacts
+            ctx.save();
+            
+            // Draw a semi-transparent fill
+            ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            
+            // Draw the border with better visibility
             ctx.strokeStyle = "#FFFFFF";
-            ctx.lineWidth = 4;
-            ctx.strokeRect(this.x,this.y,this.width,this.height);
+            ctx.lineWidth = 3;
+            ctx.strokeRect(this.x, this.y, this.width, this.height);
+            
+            // Draw inner border for better contrast
             ctx.strokeStyle = "#000000";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(this.x,this.y,this.width,this.height);
+            ctx.lineWidth = 1;
+            ctx.strokeRect(this.x + 1, this.y + 1, this.width - 2, this.height - 2);
+            
+            ctx.restore();
         }
     }
 
@@ -508,6 +578,7 @@ window.onload = function () {
     }
 
     function startJob() {
+        isZooming = true;
         newWorkers(workerCount);
         statusIndicator.innerHTML = "Processing";  
         statusIndicator.style.color = "red";    
@@ -591,18 +662,52 @@ window.onload = function () {
         running = true;
         repaint();
 
-        for (let i = 0; i< workerCount; i++){
+        // Start with a subset of workers for faster initial feedback
+        var initialWorkers = Math.min(4, workerCount);
+        for (let i = 0; i< initialWorkers; i++){
             let j = jobs.pop();
-            // console.log(workers[i]);
-            workers[i].postMessage(["setup",j.row, maxIterations,high_precision,i]);
-            workers[i].postMessage([
-                "task", j.row, j.columns,
-                j.xmin, j.dx, j.yVal
-            ]);
+            if (j) {
+                // console.log(workers[i]);
+                workers[i].postMessage(["setup",j.row, maxIterations,high_precision,i]);
+                workers[i].postMessage([
+                    "task", j.row, j.columns,
+                    j.xmin, j.dx, j.yVal
+                ]);
+            }
         }
+        
+        // Start progressive rendering timer
+        if (progressiveRendering) {
+            setTimeout(startProgressiveRendering, renderInterval);
+        }
+        
         // console.log(isMandelbrot(0,1,100));
         
         // console.log(osg.getImageData.data);               
+    }
+    
+    function startProgressiveRendering() {
+        if (!running || jobs.length === 0) return;
+        
+        // Start more workers progressively
+        var remainingWorkers = workerCount - 4;
+        var workersToStart = Math.min(4, remainingWorkers);
+        
+        for (let i = 4; i < 4 + workersToStart && jobs.length > 0; i++) {
+            let j = jobs.pop();
+            if (j && workers[i]) {
+                workers[i].postMessage(["setup",j.row, maxIterations,high_precision,i]);
+                workers[i].postMessage([
+                    "task", j.row, j.columns,
+                    j.xmin, j.dx, j.yVal
+                ]);
+            }
+        }
+        
+        // Continue progressive rendering if there are more jobs
+        if (jobs.length > 0 && running) {
+            setTimeout(startProgressiveRendering, renderInterval);
+        }
     }
 
     function undo(){
@@ -617,8 +722,17 @@ window.onload = function () {
         document.body.onmousemove = (e) =>{
             // console.log(e.clientX);
         }
-        canvas.onmousedown = handleCanvasMouseDown;
-        canvas.ontouchstart = handleCanvasTouchDown;
+        
+        // Detect touch support and bind appropriate events
+        var isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        if (isTouchDevice) {
+            canvas.ontouchstart = handleCanvasTouchDown;
+            // Prevent mouse events on touch devices to avoid conflicts
+            canvas.style.touchAction = 'none';
+        } else {
+            canvas.onmousedown = handleCanvasMouseDown;
+        }
 
         var button = document.getElementById('refreshButton');
         button.onclick = initialize;   
@@ -640,9 +754,67 @@ window.onload = function () {
         stateStack = [];
         setLimits(new BigDecimal("0.8"),new BigDecimal("1.2"),new BigDecimal("-2.2"),new BigDecimal("-1.2"));
         
+        // Add resize handler for responsive canvas
+        window.addEventListener('resize', handleResize);
+        
+        // Add performance mode toggle
+        addPerformanceToggle();
+        
         startJob();
     }
     
+    function addPerformanceToggle() {
+        // Create performance mode toggle button
+        var toggleContainer = document.createElement('div');
+        toggleContainer.className = 'setting_options';
+        toggleContainer.innerHTML = `
+            <div class="setting_option">
+                <label style="color: #444444; font-size: 1.2rem;">
+                    <input type="checkbox" id="performanceMode" checked style="margin-right: 10px;">
+                    Performance Mode
+                </label>
+                <small style="color: #666666; font-size: 0.9rem;">Faster rendering with adaptive quality</small>
+            </div>
+        `;
+        
+        // Insert before the status box
+        var statusBox = document.getElementById('status_box');
+        statusBox.parentNode.insertBefore(toggleContainer, statusBox);
+        
+        // Add event listener
+        document.getElementById('performanceMode').addEventListener('change', function(e) {
+            progressiveRendering = e.target.checked;
+            if (e.target.checked) {
+                statusIndicator.innerHTML = "Performance mode enabled";
+                setTimeout(() => {
+                    if (statusIndicator.innerHTML === "Performance mode enabled") {
+                        statusIndicator.innerHTML = "Idle";
+                    }
+                }, 2000);
+            }
+        });
+    }
+    
+    function handleResize() {
+        // Recalculate canvas size on window resize
+        var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (isMobile) {
+            canvas.height = Math.min(window.innerHeight * 0.8, 600);
+            canvas.width = Math.min(canvas.height * 1.25, window.innerWidth * 0.9);
+        } else {
+            canvas.height = Math.floor(document.documentElement.clientHeight/applicationZoom);
+            canvas.width = Math.ceil(canvas.height * 1.25);
+        }
+        
+        canvasHeight = canvas.height;
+        canvasWidth = canvas.width;
+        osc.width = canvasWidth;
+        osc.height = canvasHeight;
+        
+        // Restart the job with new dimensions
+        startJob();
+    }
+
     function onMaxIterationChange(e){
         maxIterations = Number(e.target.value);
         startJob();

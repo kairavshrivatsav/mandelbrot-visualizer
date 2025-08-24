@@ -13,6 +13,96 @@ canvas:hover{
     cursor: crosshair;
 }
 
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+    canvas {
+        cursor: crosshair;
+        max-width: 100%;
+        height: auto;
+        touch-action: none; /* Prevent default touch behaviors */
+    }
+    
+    .button_container,
+    .button_container_right {
+        font-size: 1rem;
+    }
+    
+    .setting_option {
+        font-size: 1.2rem;
+        padding: 5px;
+    }
+    
+    select {
+        font-size: 14px;
+        height: 40px;
+        padding: 8px;
+    }
+    
+    #canvas_container {
+        flex-direction: column;
+    }
+    
+    .button_container,
+    .button_container_right {
+        order: 2;
+    }
+    
+    #myCanvas {
+        order: 1;
+        margin: 10px auto;
+    }
+    
+    /* Improve touch targets */
+    .buttons {
+        font-size: 150%;
+        padding: 10px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .setting_option {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+/* Additional mobile improvements for very small screens */
+@media (max-width: 480px) {
+    .button_container,
+    .button_container_right {
+        font-size: 0.9rem;
+    }
+    
+    .setting_option {
+        font-size: 1rem;
+        padding: 3px;
+    }
+    
+    select {
+        font-size: 12px;
+        height: 35px;
+        padding: 6px;
+    }
+    
+    #status_box {
+        font-size: 0.8rem;
+        padding: 8px;
+    }
+    
+    /* Adjust performance toggle for small screens */
+    .setting_option label {
+        font-size: 1rem;
+    }
+    
+    .setting_option small {
+        font-size: 0.8rem;
+    }
+}
+
 select {
     padding: 10px;
     display: flex;
@@ -121,4 +211,23 @@ select {
     border-style: dashed; 
     padding: 10px;
     
+}
+
+/* Performance mode toggle styles */
+#performanceMode {
+    transform: scale(1.2);
+    margin-right: 10px;
+}
+
+.setting_option label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.setting_option small {
+    display: block;
+    margin-top: 5px;
+    text-align: center;
 }
